@@ -1,4 +1,4 @@
-# cloudexit-action
+# Automate cloudexit assessments
 
 Run [cloudexit](https://github.com/escapecloud/cloudexit) in GitHub Actions using non-interactive mode.
 
@@ -54,7 +54,7 @@ jobs:
       contents: read
     steps:
       - name: Run cloudexit
-        uses: escapecloud/cloudexit-action@v0
+        uses: escapecloud/cloudexit-actions@v1
         with:
           provider: aws
           auth-mode: static
@@ -89,7 +89,7 @@ jobs:
       contents: read
     steps:
       - name: Run cloudexit
-        uses: escapecloud/cloudexit-action@v0
+        uses: escapecloud/cloudexit-actions@v1
         with:
           provider: azure
           auth-mode: static
