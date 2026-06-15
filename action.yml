@@ -1,0 +1,42 @@
+name: "cloudexit-action"
+description: "Run cloudexit assessments in GitHub Actions"
+author: "EscapeCloud"
+
+inputs:
+  version:
+    description: "Cloudexit version tag to checkout (for example: v1.0.8)"
+    required: false
+    default: "v1.0.8"
+  provider:
+    description: "Cloud provider: aws or azure"
+    required: true
+  auth-mode:
+    description: "Authentication mode (v1 supports static only)"
+    required: false
+    default: "static"
+  exit-strategy:
+    description: "Exit strategy: 1 (Repatriation) or 3 (Alternate Cloud)"
+    required: true
+  assessment-type:
+    description: "Assessment type: 1 (Basic) or 2 (Standard)"
+    required: true
+  host:
+    description: "Optional ExitCloud host. Empty means offline mode."
+    required: false
+    default: ""
+  key:
+    description: "Optional ExitCloud key. Empty means offline mode."
+    required: false
+    default: ""
+
+outputs:
+  report-dir:
+    description: "Path to generated reports directory"
+
+runs:
+  using: "docker"
+  image: "Dockerfile"
+
+branding:
+  icon: "download-cloud"
+  color: "gray-dark"
