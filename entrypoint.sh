@@ -2,9 +2,26 @@
 
 set -euo pipefail
 
-provider="$(printf '%s' "${INPUT_PROVIDER:-}" | tr '[:upper:]' '[:lower:]')"
-auth_mode="$(printf '%s' "${INPUT_AUTH_MODE:-}" | tr '[:upper:]' '[:lower:]')"
-cloudexit_ref="${INPUT_VERSION:-v1.0.8}"
+get_input() {
+  local underscore_name="$1"
+  local hyphen_name="$2"
+
+  local value="${!underscore_name:-}"
+  if [[ -z "${value}" && -n "${hyphen_name}" ]]; then
+    value="$(printenv "${hyphen_name}" 2>/dev/null || true)"
+  fi
+
+  printf "%s" "${value}"
+}
+
+provider="$(printf '%s' "$(get_input INPUT_PROVIDER "INPUT_PROVIDER")" | tr '[:upper:]' '[:lower:]')"
+auth_mode="$(printf '%s' "$(get_input INPUT_AUTH_MODE "INPUT_AUTH-MODE")" | tr '[:upper:]' '[:lower:]')"
+cloudexit_ref="$(get_input INPUT_VERSION "INPUT_VERSION")"
+cloudexit_ref="${cloudexit_ref:-v1.0.9}"
+exit_strategy="$(get_input INPUT_EXIT_STRATEGY "INPUT_EXIT-STRATEGY")"
+assessment_type="$(get_input INPUT_ASSESSMENT_TYPE "INPUT_ASSESSMENT-TYPE")"
+input_host="$(get_input INPUT_HOST "INPUT_HOST")"
+input_key="$(get_input INPUT_KEY "INPUT_KEY")"
 
 if [[ "${provider}" != "aws" && "${provider}" != "azure" ]]; then
   echo "Invalid provider: '${provider}'. Expected 'aws' or 'azure'." >&2
@@ -16,13 +33,13 @@ if [[ "${auth_mode}" != "static" ]]; then
   exit 2
 fi
 
-if [[ "${INPUT_EXIT_STRATEGY:-}" != "1" && "${INPUT_EXIT_STRATEGY:-}" != "3" ]]; then
-  echo "Invalid exit-strategy: '${INPUT_EXIT_STRATEGY:-}'. Expected 1 or 3." >&2
+if [[ "${exit_strategy}" != "1" && "${exit_strategy}" != "3" ]]; then
+  echo "Invalid exit-strategy: '${exit_strategy}'. Expected 1 or 3." >&2
   exit 2
 fi
 
-if [[ "${INPUT_ASSESSMENT_TYPE:-}" != "1" && "${INPUT_ASSESSMENT_TYPE:-}" != "2" ]]; then
-  echo "Invalid assessment-type: '${INPUT_ASSESSMENT_TYPE:-}'. Expected 1 or 2." >&2
+if [[ "${assessment_type}" != "1" && "${assessment_type}" != "2" ]]; then
+  echo "Invalid assessment-type: '${assessment_type}'. Expected 1 or 2." >&2
   exit 2
 fi
 
@@ -40,10 +57,10 @@ git checkout --detach -q FETCH_HEAD
 python -m pip install --upgrade pip
 pip install -r requirements.txt
 
-export ESC_EXIT_STRATEGY="${INPUT_EXIT_STRATEGY}"
-export ESC_ASSESSMENT_TYPE="${INPUT_ASSESSMENT_TYPE}"
-export HOST="${INPUT_HOST:-}"
-export KEY="${INPUT_KEY:-}"
+export ESC_EXIT_STRATEGY="${exit_strategy}"
+export ESC_ASSESSMENT_TYPE="${assessment_type}"
+export HOST="${input_host:-}"
+export KEY="${input_key:-}"
 
 if [[ "${provider}" == "aws" ]]; then
   if [[ -z "${AWS_DEFAULT_REGION:-}" && -z "${AWS_REGION:-}" ]]; then
