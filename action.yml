@@ -4,14 +4,14 @@ author: "EscapeCloud"
 
 inputs:
   version:
-    description: "cloudexit version tag (e.g: v1.0.9)"
+    description: "cloudexit version tag (e.g: v1.1.1)"
     required: false
-    default: "v1.0.9"
+    default: "v1.1.1"
   provider:
     description: "Cloud Provider: aws or azure"
     required: true
   auth-mode:
-    description: "Authentication Mode (v1 supports static only)"
+    description: "Authentication mode: static or oidc"
     required: false
     default: "static"
   exit-strategy:

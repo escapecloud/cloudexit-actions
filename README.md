@@ -1,110 +1,75 @@
-# Automate cloudexit assessments
+# Hello! 👋
 
-Run [cloudexit](https://github.com/escapecloud/cloudexit) in GitHub Actions using non-interactive mode.
+This is the official GitHub Action for [cloudexit](https://github.com/escapecloud/cloudexit), built by EscapeCloud to run automated cloud exit readiness assessments in CI/CD.
+
+It supports both static credentials and short-lived OIDC authentication for AWS and Azure.
 
 ## Inputs
 
 | Name | Required | Default | Description |
 |---|---|---|---|
 | `provider` | Yes | — | Cloud provider: `aws` or `azure` |
-| `auth-mode` | No | `static` | Authentication mode (v1 supports `static` only) |
+| `auth-mode` | No | `static` | Authentication mode: `static` or `oidc` |
 | `exit-strategy` | Yes | — | Exit strategy: `1` or `3` |
 | `assessment-type` | Yes | — | Assessment type: `1` or `2` |
-| `version` | No | `v1.0.8` | cloudexit version tag to checkout |
+| `version` | No | `v1.1.1` | cloudexit version tag to checkout |
 | `host` | No | `""` | Passed as `HOST`; empty keeps offline mode |
 | `key` | No | `""` | Passed as `KEY`; empty keeps offline mode |
-
-## Required environment variables
-
-### AWS runs
-
-| Variable | Required | Description |
-|---|---|---|
-| `AWS_ACCESS_KEY_ID` | Yes | AWS access key id |
-| `AWS_SECRET_ACCESS_KEY` | Yes | AWS secret access key |
-| `AWS_DEFAULT_REGION` (or `AWS_REGION`) | Yes | AWS region |
-
-### Azure runs
-
-| Variable | Required | Description |
-|---|---|---|
-| `AZURE_TENANT_ID` | Yes | Azure tenant id |
-| `AZURE_CLIENT_ID` | Yes | Azure client/application id |
-| `AZURE_CLIENT_SECRET` | Yes | Azure client secret |
-| `ESC_SUBSCRIPTION_ID` | Yes | Azure subscription id used by cloudexit |
-| `ESC_RESOURCE_GROUP` | Yes | Azure resource group used by cloudexit |
 
 ## Output
 
 - `report-dir`: latest generated report directory path (for example `cloudexit/reports/20260614123456`)
 
-## Usage
+## Quick usage
 
-### AWS with static credentials
-
-```yaml
-name: CloudExit AWS Static
-on:
-  workflow_dispatch:
-
-jobs:
-  run:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - name: Run cloudexit
-        uses: escapecloud/cloudexit-actions@v1
-        with:
-          provider: aws
-          auth-mode: static
-          exit-strategy: "1"
-          assessment-type: "1"
-          host: ""
-          key: ""
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          AWS_DEFAULT_REGION: ${{ vars.AWS_DEFAULT_REGION }}
-
-      - name: Upload reports
-        uses: actions/upload-artifact@v4
-        with:
-          name: reports-aws
-          path: cloudexit/reports/**
-```
-
-
-### Azure with static credentials
+### Static mode (example)
 
 ```yaml
-name: CloudExit Azure Static
-on:
-  workflow_dispatch:
-
-jobs:
-  run:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - name: Run cloudexit
-        uses: escapecloud/cloudexit-actions@v1
-        with:
-          provider: azure
-          auth-mode: static
-          exit-strategy: "1"
-          assessment-type: "1"
-          host: ""
-          key: ""
-        env:
-          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
-          ESC_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
-          ESC_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+- name: Run cloudexit
+  uses: escapecloud/cloudexit-actions@v1
+  with:
+    provider: aws
+    auth-mode: static
+    exit-strategy: "1"
+    assessment-type: "1"
+  env:
+    AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+    AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+    AWS_DEFAULT_REGION: ${{ vars.AWS_DEFAULT_REGION }}
 ```
+
+### OIDC mode (example)
+
+```yaml
+permissions:
+  id-token: write
+  contents: read
+
+steps:
+  - uses: aws-actions/configure-aws-credentials@v4
+    with:
+      role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+      aws-region: ${{ vars.AWS_DEFAULT_REGION }}
+
+  - uses: escapecloud/cloudexit-actions@v1
+    with:
+      provider: aws
+      auth-mode: oidc
+      exit-strategy: "1"
+      assessment-type: "1"
+    env:
+      AWS_DEFAULT_REGION: ${{ vars.AWS_DEFAULT_REGION }}
+```
+
+## Full documentation
+
+For complete setup guides (AWS/Azure, static/OIDC, troubleshooting), see:
+
+- [Overview](https://cloudexit.escapecloud.io/non-interactive/overview.html)
+- [AWS guide](https://cloudexit.escapecloud.io/non-interactive/aws.html)
+- [Azure guide](https://cloudexit.escapecloud.io/non-interactive/azure.html)
+- [GitHub Actions guide](https://cloudexit.escapecloud.io/non-interactive/github-actions.html)
 
 ## Notes
 
-This initial version supports only static credentials configured as GitHub repository secrets. OIDC support will be added in a later release.
+OIDC mode expects credentials to be prepared by a prior login step (`aws-actions/configure-aws-credentials` for AWS, `azure/login` for Azure). Static mode continues to support long-lived credentials.

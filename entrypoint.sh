@@ -17,7 +17,7 @@ get_input() {
 provider="$(printf '%s' "$(get_input INPUT_PROVIDER "INPUT_PROVIDER")" | tr '[:upper:]' '[:lower:]')"
 auth_mode="$(printf '%s' "$(get_input INPUT_AUTH_MODE "INPUT_AUTH-MODE")" | tr '[:upper:]' '[:lower:]')"
 cloudexit_ref="$(get_input INPUT_VERSION "INPUT_VERSION")"
-cloudexit_ref="${cloudexit_ref:-v1.0.9}"
+cloudexit_ref="${cloudexit_ref:-v1.1.1}"
 exit_strategy="$(get_input INPUT_EXIT_STRATEGY "INPUT_EXIT-STRATEGY")"
 assessment_type="$(get_input INPUT_ASSESSMENT_TYPE "INPUT_ASSESSMENT-TYPE")"
 input_host="$(get_input INPUT_HOST "INPUT_HOST")"
@@ -28,8 +28,8 @@ if [[ "${provider}" != "aws" && "${provider}" != "azure" ]]; then
   exit 2
 fi
 
-if [[ "${auth_mode}" != "static" ]]; then
-  echo "Invalid auth-mode: '${auth_mode}'. This action version supports only 'static'." >&2
+if [[ "${auth_mode}" != "static" && "${auth_mode}" != "oidc" ]]; then
+  echo "Invalid auth-mode: '${auth_mode}'. Expected 'static' or 'oidc'." >&2
   exit 2
 fi
 
@@ -67,6 +67,18 @@ if [[ "${provider}" == "aws" ]]; then
     echo "AWS_DEFAULT_REGION (or AWS_REGION) is required for AWS runs." >&2
     exit 2
   fi
+  if [[ "${auth_mode}" == "static" ]]; then
+    if [[ -z "${AWS_ACCESS_KEY_ID:-}" || -z "${AWS_SECRET_ACCESS_KEY:-}" ]]; then
+      echo "AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY are required for AWS static mode." >&2
+      exit 2
+    fi
+  fi
+  if [[ "${auth_mode}" == "oidc" ]]; then
+    if [[ -z "${AWS_ACCESS_KEY_ID:-}" || -z "${AWS_SECRET_ACCESS_KEY:-}" || -z "${AWS_SESSION_TOKEN:-}" ]]; then
+      echo "AWS OIDC mode requires AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and AWS_SESSION_TOKEN (typically from aws-actions/configure-aws-credentials)." >&2
+      exit 2
+    fi
+  fi
   python main.py aws --non-interactive
 fi
 
@@ -74,6 +86,31 @@ if [[ "${provider}" == "azure" ]]; then
   if [[ -z "${ESC_SUBSCRIPTION_ID:-}" || -z "${ESC_RESOURCE_GROUP:-}" ]]; then
     echo "ESC_SUBSCRIPTION_ID and ESC_RESOURCE_GROUP are required for Azure runs." >&2
     exit 2
+  fi
+  if [[ "${auth_mode}" == "static" ]]; then
+    if [[ -z "${AZURE_TENANT_ID:-}" || -z "${AZURE_CLIENT_ID:-}" || -z "${AZURE_CLIENT_SECRET:-}" ]]; then
+      echo "Azure static mode requires AZURE_TENANT_ID, AZURE_CLIENT_ID, and AZURE_CLIENT_SECRET." >&2
+      exit 2
+    fi
+  fi
+  if [[ "${auth_mode}" == "oidc" ]]; then
+    if [[ -z "${AZURE_TENANT_ID:-}" || -z "${AZURE_CLIENT_ID:-}" ]]; then
+      echo "Azure OIDC mode requires AZURE_TENANT_ID and AZURE_CLIENT_ID." >&2
+      exit 2
+    fi
+    if [[ -z "${AZURE_FEDERATED_TOKEN_FILE:-}" ]]; then
+      echo "Azure OIDC mode requires AZURE_FEDERATED_TOKEN_FILE (typically from azure/login)." >&2
+      exit 2
+    fi
+    if [[ ! -f "${AZURE_FEDERATED_TOKEN_FILE}" ]]; then
+      mapped_token_file="${AZURE_FEDERATED_TOKEN_FILE/#\/home\/runner\/work\/_temp\//\/github\/runner_temp\/}"
+      if [[ -f "${mapped_token_file}" ]]; then
+        export AZURE_FEDERATED_TOKEN_FILE="${mapped_token_file}"
+      else
+        echo "AZURE_FEDERATED_TOKEN_FILE path is not accessible inside action container: ${AZURE_FEDERATED_TOKEN_FILE}" >&2
+        exit 2
+      fi
+    fi
   fi
 
   python main.py azure --non-interactive
