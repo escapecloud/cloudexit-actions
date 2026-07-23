@@ -12,7 +12,8 @@ It supports both static credentials and short-lived OIDC authentication for AWS 
 | `auth-mode` | No | `static` | Authentication mode: `static` or `oidc` |
 | `exit-strategy` | Yes | — | Exit strategy: `1` or `3` |
 | `assessment-type` | Yes | — | Assessment type: `1` or `2` |
-| `version` | No | `v1.1.1` | cloudexit version tag to checkout |
+| `egress` | No | `false` | Estimate egress: `true` or `false` |
+| `version` | No | `v1.1.4` | cloudexit version tag to checkout |
 | `host` | No | `""` | Passed as `HOST`; empty keeps offline mode |
 | `key` | No | `""` | Passed as `KEY`; empty keeps offline mode |
 

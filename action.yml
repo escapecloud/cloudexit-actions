@@ -4,9 +4,9 @@ author: "EscapeCloud"
 
 inputs:
   version:
-    description: "cloudexit version tag (e.g: v1.1.1)"
+    description: "cloudexit version tag (e.g: v1.1.4)"
     required: false
-    default: "v1.1.1"
+    default: "v1.1.4"
   provider:
     description: "Cloud Provider: aws or azure"
     required: true
@@ -20,6 +20,10 @@ inputs:
   assessment-type:
     description: "Assessment Type: 1 (Basic) or 2 (Standard)"
     required: true
+  egress:
+    description: "Estimate egress data volume and add an egress report: true or false"
+    required: false
+    default: "false"
   host:
     description: "Optional EscapeCloud Platform host. Empty means offline mode."
     required: false

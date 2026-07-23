@@ -17,11 +17,12 @@ get_input() {
 provider="$(printf '%s' "$(get_input INPUT_PROVIDER "INPUT_PROVIDER")" | tr '[:upper:]' '[:lower:]')"
 auth_mode="$(printf '%s' "$(get_input INPUT_AUTH_MODE "INPUT_AUTH-MODE")" | tr '[:upper:]' '[:lower:]')"
 cloudexit_ref="$(get_input INPUT_VERSION "INPUT_VERSION")"
-cloudexit_ref="${cloudexit_ref:-v1.1.1}"
+cloudexit_ref="${cloudexit_ref:-v1.1.4}"
 exit_strategy="$(get_input INPUT_EXIT_STRATEGY "INPUT_EXIT-STRATEGY")"
 assessment_type="$(get_input INPUT_ASSESSMENT_TYPE "INPUT_ASSESSMENT-TYPE")"
 input_host="$(get_input INPUT_HOST "INPUT_HOST")"
 input_key="$(get_input INPUT_KEY "INPUT_KEY")"
+egress="$(printf '%s' "$(get_input INPUT_EGRESS "INPUT_EGRESS")" | tr '[:upper:]' '[:lower:]')"
 
 if [[ "${provider}" != "aws" && "${provider}" != "azure" ]]; then
   echo "Invalid provider: '${provider}'. Expected 'aws' or 'azure'." >&2
@@ -41,6 +42,17 @@ fi
 if [[ "${assessment_type}" != "1" && "${assessment_type}" != "2" ]]; then
   echo "Invalid assessment-type: '${assessment_type}'. Expected 1 or 2." >&2
   exit 2
+fi
+
+egress="${egress:-false}"
+if [[ "${egress}" != "true" && "${egress}" != "false" ]]; then
+  echo "Invalid egress: '${egress}'. Expected 'true' or 'false'." >&2
+  exit 2
+fi
+
+egress_flag=""
+if [[ "${egress}" == "true" ]]; then
+  egress_flag="--egress"
 fi
 
 workspace="${GITHUB_WORKSPACE:-/github/workspace}"
@@ -79,7 +91,7 @@ if [[ "${provider}" == "aws" ]]; then
       exit 2
     fi
   fi
-  python main.py aws --non-interactive
+  python main.py aws --non-interactive ${egress_flag}
 fi
 
 if [[ "${provider}" == "azure" ]]; then
@@ -113,7 +125,7 @@ if [[ "${provider}" == "azure" ]]; then
     fi
   fi
 
-  python main.py azure --non-interactive
+  python main.py azure --non-interactive ${egress_flag}
 fi
 
 latest_report_dir="$(ls -1dt reports/* 2>/dev/null | head -n 1 || true)"
