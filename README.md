@@ -13,7 +13,8 @@ It supports both static credentials and short-lived OIDC authentication for AWS 
 | `exit-strategy` | Yes | — | Exit strategy: `1` or `3` |
 | `assessment-type` | Yes | — | Assessment type: `1` or `2` |
 | `egress` | No | `false` | Estimate egress: `true` or `false` |
-| `version` | No | `v1.1.4` | cloudexit version tag to checkout |
+| `tfstate` | No | `""` | Path to a Terraform/OpenTofu state file, relative to the workspace |
+| `version` | No | `v1.1.7` | cloudexit version tag to checkout |
 | `host` | No | `""` | Passed as `HOST`; empty keeps offline mode |
 | `key` | No | `""` | Passed as `KEY`; empty keeps offline mode |
 
@@ -60,6 +61,21 @@ steps:
       assessment-type: "1"
     env:
       AWS_DEFAULT_REGION: ${{ vars.AWS_DEFAULT_REGION }}
+```
+
+### Terraform / OpenTofu state file (example)
+
+```yaml
+- uses: hashicorp/setup-terraform@v3
+- run: terraform init
+- run: terraform state pull > infra.tfstate
+
+- uses: escapecloud/cloudexit-actions@v1
+  with:
+    provider: aws
+    tfstate: infra.tfstate
+    exit-strategy: "1"
+    assessment-type: "1"
 ```
 
 ## Full documentation

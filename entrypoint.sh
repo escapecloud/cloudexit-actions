@@ -17,20 +17,16 @@ get_input() {
 provider="$(printf '%s' "$(get_input INPUT_PROVIDER "INPUT_PROVIDER")" | tr '[:upper:]' '[:lower:]')"
 auth_mode="$(printf '%s' "$(get_input INPUT_AUTH_MODE "INPUT_AUTH-MODE")" | tr '[:upper:]' '[:lower:]')"
 cloudexit_ref="$(get_input INPUT_VERSION "INPUT_VERSION")"
-cloudexit_ref="${cloudexit_ref:-v1.1.4}"
+cloudexit_ref="${cloudexit_ref:-v1.1.7}"
 exit_strategy="$(get_input INPUT_EXIT_STRATEGY "INPUT_EXIT-STRATEGY")"
 assessment_type="$(get_input INPUT_ASSESSMENT_TYPE "INPUT_ASSESSMENT-TYPE")"
 input_host="$(get_input INPUT_HOST "INPUT_HOST")"
 input_key="$(get_input INPUT_KEY "INPUT_KEY")"
 egress="$(printf '%s' "$(get_input INPUT_EGRESS "INPUT_EGRESS")" | tr '[:upper:]' '[:lower:]')"
+tfstate="$(get_input INPUT_TFSTATE "INPUT_TFSTATE")"
 
 if [[ "${provider}" != "aws" && "${provider}" != "azure" ]]; then
   echo "Invalid provider: '${provider}'. Expected 'aws' or 'azure'." >&2
-  exit 2
-fi
-
-if [[ "${auth_mode}" != "static" && "${auth_mode}" != "oidc" ]]; then
-  echo "Invalid auth-mode: '${auth_mode}'. Expected 'static' or 'oidc'." >&2
   exit 2
 fi
 
@@ -50,12 +46,47 @@ if [[ "${egress}" != "true" && "${egress}" != "false" ]]; then
   exit 2
 fi
 
-egress_flag=""
-if [[ "${egress}" == "true" ]]; then
-  egress_flag="--egress"
+workspace="${GITHUB_WORKSPACE:-/github/workspace}"
+tfstate_path=""
+
+if [[ -n "${tfstate}" ]]; then
+  # Offline mode: the inventory is parsed from the state file, so no cloud
+  # credentials are collected and auth-mode is not consulted.
+  if [[ "${egress}" == "true" ]]; then
+    echo "egress cannot be combined with tfstate: egress estimation requires live cloud API access." >&2
+    exit 2
+  fi
+
+  if [[ "${tfstate}" = /* ]]; then
+    tfstate_path="${tfstate}"
+  else
+    tfstate_path="${workspace}/${tfstate}"
+  fi
+
+  if [[ ! -f "${tfstate_path}" ]]; then
+    echo "Terraform state file not found: ${tfstate_path}" >&2
+    echo "  input 'tfstate' was '${tfstate}', resolved against ${workspace}" >&2
+    exit 2
+  fi
+
+  echo "tfstate mode: reading ${tfstate_path}"
+  echo "No cloud credentials are used; auth-mode is ignored."
+else
+  if [[ "${auth_mode}" != "static" && "${auth_mode}" != "oidc" ]]; then
+    echo "Invalid auth-mode: '${auth_mode}'. Expected 'static' or 'oidc'." >&2
+    exit 2
+  fi
 fi
 
-workspace="${GITHUB_WORKSPACE:-/github/workspace}"
+# Built as an array so a workspace path containing spaces survives expansion.
+cli_args=(--non-interactive)
+if [[ -n "${tfstate_path}" ]]; then
+  cli_args+=(--tfstate "${tfstate_path}")
+fi
+if [[ "${egress}" == "true" ]]; then
+  cli_args+=(--egress)
+fi
+
 mkdir -p "${workspace}"
 cd "${workspace}"
 
@@ -75,57 +106,61 @@ export HOST="${input_host:-}"
 export KEY="${input_key:-}"
 
 if [[ "${provider}" == "aws" ]]; then
-  if [[ -z "${AWS_DEFAULT_REGION:-}" && -z "${AWS_REGION:-}" ]]; then
-    echo "AWS_DEFAULT_REGION (or AWS_REGION) is required for AWS runs." >&2
-    exit 2
-  fi
-  if [[ "${auth_mode}" == "static" ]]; then
-    if [[ -z "${AWS_ACCESS_KEY_ID:-}" || -z "${AWS_SECRET_ACCESS_KEY:-}" ]]; then
-      echo "AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY are required for AWS static mode." >&2
+  if [[ -z "${tfstate_path}" ]]; then
+    if [[ -z "${AWS_DEFAULT_REGION:-}" && -z "${AWS_REGION:-}" ]]; then
+      echo "AWS_DEFAULT_REGION (or AWS_REGION) is required for AWS runs." >&2
       exit 2
     fi
-  fi
-  if [[ "${auth_mode}" == "oidc" ]]; then
-    if [[ -z "${AWS_ACCESS_KEY_ID:-}" || -z "${AWS_SECRET_ACCESS_KEY:-}" || -z "${AWS_SESSION_TOKEN:-}" ]]; then
-      echo "AWS OIDC mode requires AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and AWS_SESSION_TOKEN (typically from aws-actions/configure-aws-credentials)." >&2
-      exit 2
+    if [[ "${auth_mode}" == "static" ]]; then
+      if [[ -z "${AWS_ACCESS_KEY_ID:-}" || -z "${AWS_SECRET_ACCESS_KEY:-}" ]]; then
+        echo "AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY are required for AWS static mode." >&2
+        exit 2
+      fi
     fi
-  fi
-  python main.py aws --non-interactive ${egress_flag}
-fi
-
-if [[ "${provider}" == "azure" ]]; then
-  if [[ -z "${ESC_SUBSCRIPTION_ID:-}" || -z "${ESC_RESOURCE_GROUP:-}" ]]; then
-    echo "ESC_SUBSCRIPTION_ID and ESC_RESOURCE_GROUP are required for Azure runs." >&2
-    exit 2
-  fi
-  if [[ "${auth_mode}" == "static" ]]; then
-    if [[ -z "${AZURE_TENANT_ID:-}" || -z "${AZURE_CLIENT_ID:-}" || -z "${AZURE_CLIENT_SECRET:-}" ]]; then
-      echo "Azure static mode requires AZURE_TENANT_ID, AZURE_CLIENT_ID, and AZURE_CLIENT_SECRET." >&2
-      exit 2
-    fi
-  fi
-  if [[ "${auth_mode}" == "oidc" ]]; then
-    if [[ -z "${AZURE_TENANT_ID:-}" || -z "${AZURE_CLIENT_ID:-}" ]]; then
-      echo "Azure OIDC mode requires AZURE_TENANT_ID and AZURE_CLIENT_ID." >&2
-      exit 2
-    fi
-    if [[ -z "${AZURE_FEDERATED_TOKEN_FILE:-}" ]]; then
-      echo "Azure OIDC mode requires AZURE_FEDERATED_TOKEN_FILE (typically from azure/login)." >&2
-      exit 2
-    fi
-    if [[ ! -f "${AZURE_FEDERATED_TOKEN_FILE}" ]]; then
-      mapped_token_file="${AZURE_FEDERATED_TOKEN_FILE/#\/home\/runner\/work\/_temp\//\/github\/runner_temp\/}"
-      if [[ -f "${mapped_token_file}" ]]; then
-        export AZURE_FEDERATED_TOKEN_FILE="${mapped_token_file}"
-      else
-        echo "AZURE_FEDERATED_TOKEN_FILE path is not accessible inside action container: ${AZURE_FEDERATED_TOKEN_FILE}" >&2
+    if [[ "${auth_mode}" == "oidc" ]]; then
+      if [[ -z "${AWS_ACCESS_KEY_ID:-}" || -z "${AWS_SECRET_ACCESS_KEY:-}" || -z "${AWS_SESSION_TOKEN:-}" ]]; then
+        echo "AWS OIDC mode requires AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and AWS_SESSION_TOKEN (typically from aws-actions/configure-aws-credentials)." >&2
         exit 2
       fi
     fi
   fi
+  python main.py aws "${cli_args[@]}"
+fi
 
-  python main.py azure --non-interactive ${egress_flag}
+if [[ "${provider}" == "azure" ]]; then
+  if [[ -z "${tfstate_path}" ]]; then
+    if [[ -z "${ESC_SUBSCRIPTION_ID:-}" || -z "${ESC_RESOURCE_GROUP:-}" ]]; then
+      echo "ESC_SUBSCRIPTION_ID and ESC_RESOURCE_GROUP are required for Azure runs." >&2
+      exit 2
+    fi
+    if [[ "${auth_mode}" == "static" ]]; then
+      if [[ -z "${AZURE_TENANT_ID:-}" || -z "${AZURE_CLIENT_ID:-}" || -z "${AZURE_CLIENT_SECRET:-}" ]]; then
+        echo "Azure static mode requires AZURE_TENANT_ID, AZURE_CLIENT_ID, and AZURE_CLIENT_SECRET." >&2
+        exit 2
+      fi
+    fi
+    if [[ "${auth_mode}" == "oidc" ]]; then
+      if [[ -z "${AZURE_TENANT_ID:-}" || -z "${AZURE_CLIENT_ID:-}" ]]; then
+        echo "Azure OIDC mode requires AZURE_TENANT_ID and AZURE_CLIENT_ID." >&2
+        exit 2
+      fi
+      if [[ -z "${AZURE_FEDERATED_TOKEN_FILE:-}" ]]; then
+        echo "Azure OIDC mode requires AZURE_FEDERATED_TOKEN_FILE (typically from azure/login)." >&2
+        exit 2
+      fi
+      if [[ ! -f "${AZURE_FEDERATED_TOKEN_FILE}" ]]; then
+        mapped_token_file="${AZURE_FEDERATED_TOKEN_FILE/#\/home\/runner\/work\/_temp\//\/github\/runner_temp\/}"
+        if [[ -f "${mapped_token_file}" ]]; then
+          export AZURE_FEDERATED_TOKEN_FILE="${mapped_token_file}"
+        else
+          echo "AZURE_FEDERATED_TOKEN_FILE path is not accessible inside action container: ${AZURE_FEDERATED_TOKEN_FILE}" >&2
+          exit 2
+        fi
+      fi
+    fi
+  fi
+
+  python main.py azure "${cli_args[@]}"
 fi
 
 latest_report_dir="$(ls -1dt reports/* 2>/dev/null | head -n 1 || true)"
