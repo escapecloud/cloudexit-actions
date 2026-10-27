@@ -17,21 +17,23 @@ get_input() {
 provider="$(printf '%s' "$(get_input INPUT_PROVIDER "INPUT_PROVIDER")" | tr '[:upper:]' '[:lower:]')"
 auth_mode="$(printf '%s' "$(get_input INPUT_AUTH_MODE "INPUT_AUTH-MODE")" | tr '[:upper:]' '[:lower:]')"
 cloudexit_ref="$(get_input INPUT_VERSION "INPUT_VERSION")"
-cloudexit_ref="${cloudexit_ref:-v1.1.7}"
+cloudexit_ref="${cloudexit_ref:-v2.0.0}"
 exit_strategy="$(get_input INPUT_EXIT_STRATEGY "INPUT_EXIT-STRATEGY")"
 assessment_type="$(get_input INPUT_ASSESSMENT_TYPE "INPUT_ASSESSMENT-TYPE")"
 input_host="$(get_input INPUT_HOST "INPUT_HOST")"
 input_key="$(get_input INPUT_KEY "INPUT_KEY")"
 egress="$(printf '%s' "$(get_input INPUT_EGRESS "INPUT_EGRESS")" | tr '[:upper:]' '[:lower:]')"
 tfstate="$(get_input INPUT_TFSTATE "INPUT_TFSTATE")"
+upload="$(printf '%s' "$(get_input INPUT_UPLOAD "INPUT_UPLOAD")" | tr '[:upper:]' '[:lower:]')"
+strict="$(printf '%s' "$(get_input INPUT_STRICT "INPUT_STRICT")" | tr '[:upper:]' '[:lower:]')"
 
 if [[ "${provider}" != "aws" && "${provider}" != "azure" ]]; then
   echo "Invalid provider: '${provider}'. Expected 'aws' or 'azure'." >&2
   exit 2
 fi
 
-if [[ "${exit_strategy}" != "1" && "${exit_strategy}" != "3" ]]; then
-  echo "Invalid exit-strategy: '${exit_strategy}'. Expected 1 or 3." >&2
+if [[ "${exit_strategy}" != "1" && "${exit_strategy}" != "2" && "${exit_strategy}" != "3" ]]; then
+  echo "Invalid exit-strategy: '${exit_strategy}'. Expected 1, 2 or 3." >&2
   exit 2
 fi
 
@@ -43,6 +45,18 @@ fi
 egress="${egress:-false}"
 if [[ "${egress}" != "true" && "${egress}" != "false" ]]; then
   echo "Invalid egress: '${egress}'. Expected 'true' or 'false'." >&2
+  exit 2
+fi
+
+upload="${upload:-auto}"
+if [[ "${upload}" != "auto" && "${upload}" != "required" && "${upload}" != "off" ]]; then
+  echo "Invalid upload: '${upload}'. Expected 'auto', 'required' or 'off'." >&2
+  exit 2
+fi
+
+strict="${strict:-false}"
+if [[ "${strict}" != "true" && "${strict}" != "false" ]]; then
+  echo "Invalid strict: '${strict}'. Expected 'true' or 'false'." >&2
   exit 2
 fi
 
@@ -79,12 +93,15 @@ else
 fi
 
 # Built as an array so a workspace path containing spaces survives expansion.
-cli_args=(--non-interactive)
+cli_args=(--non-interactive --upload "${upload}")
 if [[ -n "${tfstate_path}" ]]; then
   cli_args+=(--tfstate "${tfstate_path}")
 fi
 if [[ "${egress}" == "true" ]]; then
   cli_args+=(--egress)
+fi
+if [[ "${strict}" == "true" ]]; then
+  cli_args+=(--strict)
 fi
 
 mkdir -p "${workspace}"
@@ -98,12 +115,18 @@ git fetch --depth 1 origin "${cloudexit_ref}"
 git checkout --detach -q FETCH_HEAD
 
 python -m pip install --upgrade pip
-pip install -r requirements.txt
+pip install .
 
 export ESC_EXIT_STRATEGY="${exit_strategy}"
 export ESC_ASSESSMENT_TYPE="${assessment_type}"
-export HOST="${input_host:-}"
-export KEY="${input_key:-}"
+if [[ -n "${input_host}" ]]; then
+  export CLOUDEXIT_HOST="${input_host}"
+fi
+if [[ -n "${input_key}" ]]; then
+  export CLOUDEXIT_API_KEY="${input_key}"
+fi
+
+cli_status=0
 
 if [[ "${provider}" == "aws" ]]; then
   if [[ -z "${tfstate_path}" ]]; then
@@ -124,7 +147,7 @@ if [[ "${provider}" == "aws" ]]; then
       fi
     fi
   fi
-  python main.py aws "${cli_args[@]}"
+  python main.py aws "${cli_args[@]}" || cli_status=$?
 fi
 
 if [[ "${provider}" == "azure" ]]; then
@@ -160,10 +183,18 @@ if [[ "${provider}" == "azure" ]]; then
     fi
   fi
 
-  python main.py azure "${cli_args[@]}"
+  python main.py azure "${cli_args[@]}" || cli_status=$?
+fi
+
+if [[ -d reports ]]; then
+  # The CLI keeps reports owner-only and the container runs as root, so hand
+  # them to the workspace owner for later steps such as upload-artifact.
+  chown -R "$(stat -c '%u:%g' "${workspace}")" reports || true
 fi
 
 latest_report_dir="$(ls -1dt reports/* 2>/dev/null | head -n 1 || true)"
 if [[ -n "${latest_report_dir:-}" && -n "${GITHUB_OUTPUT:-}" ]]; then
   echo "report-dir=cloudexit/${latest_report_dir}" >> "${GITHUB_OUTPUT}"
 fi
+
+exit "${cli_status}"

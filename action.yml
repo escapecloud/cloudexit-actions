@@ -4,9 +4,9 @@ author: "EscapeCloud"
 
 inputs:
   version:
-    description: "cloudexit version tag (e.g: v1.1.7)"
+    description: "cloudexit version tag (e.g: v2.0.0)"
     required: false
-    default: "v1.1.7"
+    default: "v2.0.0"
   provider:
     description: "Cloud Provider: aws or azure"
     required: true
@@ -15,7 +15,7 @@ inputs:
     required: false
     default: "static"
   exit-strategy:
-    description: "Exit Strategy: 1 (Repatriation) or 3 (Alternate Cloud)"
+    description: "Exit Strategy: 1 (Repatriation), 2 (Hybrid Cloud) or 3 (Alternate Cloud)"
     required: true
   assessment-type:
     description: "Assessment Type: 1 (Basic) or 2 (Standard)"
@@ -29,13 +29,21 @@ inputs:
     required: false
     default: ""
   host:
-    description: "Optional EscapeCloud Platform host. Empty means offline mode."
+    description: "Optional EscapeCloud Platform host (CLOUDEXIT_HOST). Empty means offline mode."
     required: false
     default: ""
   key:
-    description: "Optional EscapeCloud Platform key. Empty means offline mode."
+    description: "Optional EscapeCloud Platform API key (CLOUDEXIT_API_KEY). Empty means offline mode."
     required: false
     default: ""
+  upload:
+    description: "Upload to the platform: auto (when host and key are set), required (fail without them) or off"
+    required: false
+    default: "auto"
+  strict:
+    description: "Fail the run when the platform reports warnings: true or false"
+    required: false
+    default: "false"
 
 outputs:
   report-dir:
